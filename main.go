@@ -8,10 +8,19 @@ import (
 // WindData PGN 130306
 type WindData struct {
 	SID           byte
-	WindSpeed     []byte
-	WindDirection []byte
+	WindSpeed     float64
+	WindDirection uint16
 	WindReference uint16
 	ReservedBits  uint16
+}
+
+type fieldData struct {
+	bitSize          int
+	requestParameter string
+	commandParameter string
+	maxRange         float64
+	minRange         float64
+	resolution       float64
 }
 
 // 16 2 147 19 2 2 253 1 255 36 108 176 2 0 8 64 15 0 102 108 248 255 255 248 16 3
@@ -26,6 +35,7 @@ type Msg struct {
 	TimeStamp    time.Time
 	DataLength   byte
 	Data         []byte
+	CRC          byte
 }
 
 // PGNData is an interface that allows for the data to be parsed appropriately
@@ -36,6 +46,25 @@ type PGNData interface {
 var pgnMap = map[uint32]PGNData{
 	130306: &WindData{},
 	// 127250: "VesselHeading",
+}
+
+var dataFieldMap = map[string]fieldData{
+	"Wind Speed": fieldData{
+		bitSize:          16,
+		requestParameter: "optional",
+		commandParameter: "optional",
+		maxRange:         655.32,
+		minRange:         0,
+		resolution:       .01,
+	},
+	"Wind Direction": fieldData{
+		bitSize:          16,
+		requestParameter: "optional",
+		commandParameter: "optional",
+		maxRange:         6.2831853,
+		minRange:         0,
+		resolution:       .0001,
+	},
 }
 
 func main() {
@@ -79,7 +108,8 @@ func createDataType(pgn uint32, data []byte) (PGNData, error) {
 
 func (wd *WindData) parseData(data []byte) {
 	wd.SID = data[0]
-	wd.WindSpeed = data[1:3]
-	wd.WindDirection = data[3:5]
+	windSpeed := uint16(data[1]) | uint16(data[2])<<8
+	wd.WindSpeed = float64(windSpeed) * .01
+	wd.WindDirection = uint16(data[3]) | uint16(data[4])<<8
 	fmt.Println("wind data: ", wd)
 }
