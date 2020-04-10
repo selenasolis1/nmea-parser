@@ -25,8 +25,8 @@ type fieldData struct {
 
 // 16 2 147 19 2 2 253 1 255 36 108 176 2 0 8 64 15 0 102 108 248 255 255 248 16 3
 
-// Msg nmea2000 data
-type Msg struct {
+// Message nmea2000 data
+type Message struct {
 	PacketLength byte
 	Priority     byte
 	PGN          uint32
@@ -34,8 +34,14 @@ type Msg struct {
 	Source       byte
 	TimeStamp    time.Time
 	DataLength   byte
-	Data         []byte
+	Data         NMEAData
 	CRC          byte
+}
+
+// NMEAData holds the 8 bytes of data that will need to be parsed dependent on PGN
+type NMEAData struct {
+	pgn  uint32
+	data []byte
 }
 
 // PGNData is an interface that allows for the data to be parsed appropriately
@@ -69,14 +75,19 @@ var dataFieldMap = map[string]fieldData{
 
 func main() {
 	bs := []byte{16, 2, 147, 19, 2, 2, 253, 1, 255, 36, 108, 176, 2, 0, 8, 64, 15, 0, 102, 108, 248, 255, 255, 248, 16, 3}
-	parse(bs)
+	msg := getRequest(bs)
+	fmt.Println("msg: ", msg)
+	msg.Data.Parse()
 }
 
-func parse(frame []byte) {
+func getRequest(frame []byte) Message {
 	pgn := uint32(frame[5]) | uint32(frame[6])<<8 | uint32(frame[7])<<16
+	d := NMEAData{
+		pgn:  pgn,
+		data: frame[15 : len(frame)-3],
+	}
 	fmt.Println(pgn)
-
-	msg := Msg{
+	msg := Message{
 		PacketLength: frame[3],
 		Priority:     frame[4],
 		PGN:          pgn,
@@ -84,24 +95,28 @@ func parse(frame []byte) {
 		Source:       frame[9],
 		TimeStamp:    time.Now(),
 		DataLength:   frame[14],
-		Data:         frame[15 : len(frame)-3],
+		Data:         d,
 	}
-	fmt.Println(msg)
-	data := frame[15 : len(frame)-2]
-	t, err := createDataType(pgn, data)
+	return msg
+}
+
+// Parse will use the PGN to create the correct data type and calculate the appropriate
+// readable values for each data field.
+func (nd *NMEAData) Parse() {
+	t, err := createDataType(nd.pgn)
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(t)
+	t.parseData(nd.data)
+	fmt.Println("t ", t)
 }
 
-func createDataType(pgn uint32, data []byte) (PGNData, error) {
+func createDataType(pgn uint32) (PGNData, error) {
 	v, ok := pgnMap[pgn]
 	if !ok {
 		err := fmt.Errorf("Unrecognizable pgn")
 		return nil, err
 	}
-	v.parseData(data)
 	fmt.Println("v ", v)
 	return v, nil
 }
